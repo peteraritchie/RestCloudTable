@@ -162,22 +162,6 @@ namespace PRI
 			                     "{0} {1}:{2}", "SharedKeyLite", accountName, signature);
 		}
 
-		private static string CreateAuthorizationHeader(WebRequest request, string resource,
-			string accountName, string key)
-		{
-			var signableText = String.Format("{0}\n{1}\n{2}\n{3}\n/{4}/{5}", request.Method,
-			                                 request.Headers["Content-MD5"],
-			                                 request.Headers["Content-Type"],
-			                                 request.Headers["x-ms-date"], accountName, resource);
-			using (HMACSHA256 hasher = new HMACSHA256(Convert.FromBase64String(key)))
-			{
-				string signature = Convert.ToBase64String(hasher.ComputeHash(Encoding.UTF8.GetBytes(signableText)));
-
-				return String.Format(CultureInfo.InvariantCulture,
-				                     "{0} {1}:{2}", "SharedKeyLite", accountName, signature);
-			}
-		}
-
 		private static Uri BuildQueryUri<T>(TableQuery<T> tableQuery, Uri tableUri) where T : ITableEntity, new()
 		{
 			UriQueryBuilder builder = new UriQueryBuilder();
