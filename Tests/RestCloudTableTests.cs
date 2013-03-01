@@ -9,7 +9,7 @@ using PRI;
 namespace Tests
 {
 	[TestClass]
-	public class ResetCloudTableTests
+	public class RestCloudTableTests
 	{
 		private static string accountName;
 		private static string accountKey;
