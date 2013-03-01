@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Data.Common;
 using System.Linq;
@@ -9,6 +10,11 @@ using PRI;
 
 namespace Tests
 {
+	/// <summary>
+	/// This class performs some tests directly on Azure (they're moke like integration tests than
+	/// unit tests).  The Initialize method sets up some static state based on configuration, then
+	/// sets Azure table storage to a known state (has a table named "test" and adds an entity to it)
+	/// </summary>
 	[TestClass]
 	public class RestCloudTableExistingDataTests
 	{
@@ -106,7 +112,7 @@ namespace Tests
 					                          TableOperators.And,
 					                          TableQuery.GenerateFilterCondition("RowKey", QueryComparisons.Equal, "Peter")));
 
-			var entities = restTable.QueryEntities(tableQuery);
+			IEnumerable<ContactEntity> entities = restTable.QueryEntities(tableQuery);
 			Assert.IsNotNull(entities);
 			Assert.AreEqual(1, entities.Count());
 			var entity = entities.ElementAt(0);
@@ -147,7 +153,6 @@ namespace Tests
 			entity.ETag = entity.ETag ?? "*";
 			entity.PhoneNumber = "613-231-1165";
 
-			//table.Execute(TableOperation.Replace(entity));
 			restTable.UpdateEntity(entity);
 			entity = restTable.RetrieveEntity<ContactEntity>("Ritchie", "Peter");
 
@@ -218,43 +223,5 @@ namespace Tests
 			Assert.AreEqual("1@2.com", entity.Email);
 			Assert.AreEqual("613-231-1165", entity.PhoneNumber);
 		}
-
-		//[TestMethod]
-		//public void Test2()
-		//{
-		//    try
-		//    {
-		//        XElement doc = restTable.GetEntity("Ritchie", "Peter");
-		//        var properties = from property in doc.Descendants()
-		//                       where property.Name.Namespace == "http://schemas.microsoft.com/ado/2007/08/dataservices"
-		//                       select property;
-		//        var entity = new ContactEntity();
-		//        entity.PartitionKey = properties.First(e => e.Name.LocalName == "PartitionKey").Value;
-		//        entity.RowKey = properties.First(e => e.Name.LocalName == "RowKey").Value;
-		//        var type = entity.GetType();
-		//        foreach (var prop in type.GetProperties(BindingFlags.SetField | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-		//        {
-		//            var xElement = properties.FirstOrDefault(value => 0 == String.Compare(value.Name.LocalName, prop.Name, StringComparison.OrdinalIgnoreCase));
-		//            if(null != xElement)
-		//            {
-		//                var c = TypeDescriptor.GetConverter(prop.PropertyType);
-		//                if(c != null && c.CanConvertFrom(typeof(String)) && c.CanConvertTo(prop.PropertyType))
-		//                {
-		//                    prop.SetValue(entity, c.ConvertFromInvariantString(xElement.Value), null);
-		//                }
-		//            }
-		//        }
-		//        Console.WriteLine('x');
-		//        // Create Table
-		//        // Query Entities
-		//        // Insert Entity
-
-		//    }
-		//    catch (Exception ex)
-		//    {
-		//        Trace.WriteLine(ex);
-		//        throw;
-		//    }
-		//}
 	}
 }
