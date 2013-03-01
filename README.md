@@ -1,7 +1,7 @@
 RestCloudTable
 ==============
 
-RestCloudTable
+This sample project makes use of the Azure Table Storage REST API
 
 Running the tests
 -----------------
@@ -22,3 +22,7 @@ As you might imagine, I did not include my account name and account key in the p
 	 connectionString="DefaultEndpointsProtocol=https;AccountName=myAccountName;AccountKey=myAccountKey" />
 </connectionStrings>
 ```
+
+Until those config files are created on your local computer the tests will not run.
+
+The tests assume you're hitting a production Azure server, it doesn't use a local emulated storage service.
