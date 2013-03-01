@@ -115,7 +115,7 @@ namespace PRI
 			{
 				var effectiveDate = DateTime.Parse(certificate.GetEffectiveDateString());
 				var expirationDate = DateTime.Parse(certificate.GetExpirationDateString());
-				if (effectiveDate <= DateTime.Now && expirationDate.AddDays(-14) >= DateTime.Now)
+				if (effectiveDate < DateTime.Now || expirationDate.AddDays(14) > DateTime.Now)
 				{
 					return true;
 				}
@@ -142,8 +142,6 @@ namespace PRI
 			return request;
 		}
 
-		/// http://blog.einbu.no/2009/08/authenticating-against-azure-table-storage/
-		/// http://social.msdn.microsoft.com/Forums/en-US/windowsazureconnectivity/thread/84415c36-9475-4af0-9f52-c534f5681432/
 		private static string CreateLiteAuthorizationHeader(WebRequest request, string resource,
 			string accountName, string key)
 		{
@@ -241,7 +239,16 @@ namespace PRI
 
 		#endregion
 
-		public static void Delete(string accountName, string accountKey, string tableName)
+		/// <summary>
+		/// Removes a table from Azure Table Storage
+		/// </summary>
+		/// <param name="accountName">Account name under which the table will be removed.</param>
+		/// <param name="accountKey">Account key to access the account.</param>
+		/// <param name="tableName">Name of the table to remove.</param>
+		/// <returns>The table object that represents the newly created table</returns>
+		/// <exception cref="TableAlreadyExistsException">If table already exists.</exception>
+		/// <exception cref="WebException">Thrown by the networking subsystem if there is a networking error.</exception>
+		public static void Delete(string accountName, string accountKey, string tableName, ServerCertificateValidationCallback callback = null)
 		{
 			Uri uri = new Uri(String.Format(TableUriFormatString, accountName, 
 				string.Format("Tables('{0}')", tableName)));
@@ -252,8 +259,16 @@ namespace PRI
 			request.ContentLength = 0;
 			SignRequest(accountName, accountKey, request);
 
+			RemoteCertificateValidationCallback oldCallback =
+				ServicePointManager.ServerCertificateValidationCallback;
 			try
 			{
+				if (callback != null)
+				{
+					ServicePointManager.ServerCertificateValidationCallback =
+						(sender, certificate, chain, errors) =>
+						callback(chain, errors, sender, certificate, request, oldCallback);
+				}
 				request.GetResponse();
 			}
 			catch (WebException webException)
@@ -265,9 +280,22 @@ namespace PRI
 				}
 				throw;
 			}
+			finally
+			{
+				ServicePointManager.ServerCertificateValidationCallback = oldCallback;
+			}
 		}
 
-		public static RestCloudTable Create(string accountName, string accountKey, string tableName)
+		/// <summary>
+		/// Adds a table to Azure Table Storage
+		/// </summary>
+		/// <param name="accountName">Account name under which the table will be added.</param>
+		/// <param name="accountKey">Account key to access the account.</param>
+		/// <param name="tableName">Name of the table to add.</param>
+		/// <returns>The table object that represents the newly created table</returns>
+		/// <exception cref="TableAlreadyExistsException">If table already exists.</exception>
+		/// <exception cref="WebException">Thrown by the networking subsystem if there is a networking error.</exception>
+		public static RestCloudTable Create(string accountName, string accountKey, string tableName, ServerCertificateValidationCallback callback = null)
 		{
 			Uri uri = new Uri(String.Format(TableUriFormatString, accountName, "Tables"));
 			var request = BuildRequestCore(uri);
@@ -280,8 +308,17 @@ namespace PRI
 			var requestStream = request.GetRequestStream();
 			stream.CopyTo(requestStream);
 			requestStream.Close();
+
+			RemoteCertificateValidationCallback oldCallback =
+				ServicePointManager.ServerCertificateValidationCallback;
 			try
 			{
+				if (callback != null)
+				{
+					ServicePointManager.ServerCertificateValidationCallback =
+						(sender, certificate, chain, errors) =>
+						callback(chain, errors, sender, certificate, request, oldCallback);
+				}
 				request.GetResponse();
 			}
 			catch (WebException webException)
@@ -292,6 +329,10 @@ namespace PRI
 					throw new TableAlreadyExistsException();
 				}
 				throw;
+			}
+			finally
+			{
+				ServicePointManager.ServerCertificateValidationCallback = oldCallback;
 			}
 			return new RestCloudTable(accountName, accountKey, tableName);
 		}
@@ -357,7 +398,7 @@ namespace PRI
 					return oldCallback(sender, certificate, chain, errors);
 				};
 
-		private ServerCertificateValidationCallback ServerCertificateValidationCallback
+		public ServerCertificateValidationCallback ServerCertificateValidationCallback
 		{
 			get
 			{
@@ -420,7 +461,7 @@ namespace PRI
 
 		public IEnumerable<T> QueryEntities<T>(TableQuery<T> tableQuery) where T : TableEntity, new()
 		{
-			var doc = QueryEntity(accountName, accountKey, tableName, tableQuery);
+			var doc = QueryEntity(accountName, accountKey, tableName, tableQuery, callback);
 			return ToEntities<T>(doc);
 		}
 
@@ -450,21 +491,27 @@ namespace PRI
 			Uri uri =
 				new Uri(String.Format("{0}{1}", GetTableUrlText(accountName, tableName),
 				                      String.Format("(PartitionKey='{0}',RowKey='{1}'){2}", entity.PartitionKey,
-													entity.RowKey, string.Format("?timeout={0}", timeout))));
+				                                    entity.RowKey, string.Format("?timeout={0}", timeout))));
 			var request = BuildRequestCore(uri);
 			request.Method = method;
 			request.Headers["x-ms-version"] = XMsVersion;
 			request.UserAgent = UserAgent;
 			request.Headers.Add("If-Match", entity.ETag);
 			var stream = GetRequestStreamForEntity(entity, request);
-
 			request.ContentLength = stream.Length;
 			SignRequest(accountName, accountKey, request);
-			var requestStream = request.GetRequestStream();
-			stream.CopyTo(requestStream);
-			requestStream.Close();
+
+			RemoteCertificateValidationCallback oldCallback =
+				ServicePointManager.ServerCertificateValidationCallback;
 			try
 			{
+				ServicePointManager.ServerCertificateValidationCallback =
+					(sender, certificate, chain, errors) =>
+					callback(chain, errors, sender, certificate, request, oldCallback);
+
+				var requestStream = request.GetRequestStream();
+				stream.CopyTo(requestStream);
+				requestStream.Close();
 				request.GetResponse();
 			}
 			catch (WebException webException)
@@ -475,6 +522,10 @@ namespace PRI
 				if (response != null && response.StatusCode == HttpStatusCode.NotFound) return;
 				throw;
 			}
+			finally
+			{
+				ServicePointManager.ServerCertificateValidationCallback = oldCallback;
+			}
 		}
 
 		/// <summary>
@@ -482,13 +533,12 @@ namespace PRI
 		/// </summary>
 		/// <typeparam name="T"></typeparam>
 		/// <param name="entity"></param>
-		/// http://msdn.microsoft.com/en-ca/library/windowsazure/dd179433.aspx
-		public void InsertEntity<T>(T entity) where T: TableEntity
+		public void InsertEntity<T>(T entity) where T : TableEntity
 		{
 			if (entity == null) throw new ArgumentNullException("entity");
 			Uri uri = new Uri(
 				String.Format("{0}{1}", GetTableUrlText(accountName, tableName),
-				string.Format("()?timeout={0}", Timeout.ToString(CultureInfo.InvariantCulture))));
+				              string.Format("()?timeout={0}", Timeout.ToString(CultureInfo.InvariantCulture))));
 			var request = BuildRequestCore(uri);
 			request.Method = WebRequestMethods.Http.Post;
 			request.Headers["x-ms-version"] = XMsVersion;
@@ -496,11 +546,16 @@ namespace PRI
 			var stream = GetRequestStreamForEntity(entity, request);
 			request.ContentLength = stream.Length;
 			SignRequest(accountName, accountKey, request);
-			var requestStream = request.GetRequestStream();
-			stream.CopyTo(requestStream);
-			requestStream.Close();
+			RemoteCertificateValidationCallback oldCallback =
+				ServicePointManager.ServerCertificateValidationCallback;
 			try
 			{
+				ServicePointManager.ServerCertificateValidationCallback =
+					(sender, certificate, chain, errors) =>
+					callback(chain, errors, sender, certificate, request, oldCallback);
+				var requestStream = request.GetRequestStream();
+				stream.CopyTo(requestStream);
+				requestStream.Close();
 				request.GetResponse();
 			}
 			catch (WebException webException)
@@ -512,10 +567,14 @@ namespace PRI
 				}
 				throw;
 			}
+			finally
+			{
+				ServicePointManager.ServerCertificateValidationCallback = oldCallback;
+			}
 		}
 
 		private static XmlDocument QueryEntity<T>(string accountName, string accountKey,
-			string tableName, TableQuery<T> tableQuery) where T : ITableEntity, new()
+			string tableName, TableQuery<T> tableQuery, ServerCertificateValidationCallback callback) where T : ITableEntity, new()
 		{
 			var tableUri = new Uri(GetTableUrlText(accountName, tableName));
 			var uri = BuildQueryUri(tableQuery, tableUri);
@@ -537,14 +596,26 @@ namespace PRI
 																	   accountName, accountKey);
 			request.Headers.Add("Authorization", authorizationHeader);
 
-			var response = request.GetResponse();
-			var stream = response.GetResponseStream();
-			if (stream == null) return null;
-			using (var reader = new StreamReader(stream))
+			RemoteCertificateValidationCallback oldCallback =
+				ServicePointManager.ServerCertificateValidationCallback;
+			try
 			{
-				var doc = new XmlDocument();
-				doc.Load(reader);
-				return doc;
+				ServicePointManager.ServerCertificateValidationCallback =
+					(sender, certificate, chain, errors) =>
+					callback(chain, errors, sender, certificate, request, oldCallback);
+				var response = request.GetResponse();
+				var stream = response.GetResponseStream();
+				if (stream == null) return null;
+				using (var reader = new StreamReader(stream))
+				{
+					var doc = new XmlDocument();
+					doc.Load(reader);
+					return doc;
+				}
+			}
+			finally
+			{
+				ServicePointManager.ServerCertificateValidationCallback = oldCallback;
 			}
 		}
 	}
