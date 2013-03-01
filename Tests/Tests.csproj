@@ -68,7 +68,7 @@
     <Compile Include="ContactEntity.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RestCloudTableExistingDataTests.cs" />
-    <Compile Include="ResetCloudTableTests.cs" />
+    <Compile Include="RestCloudTableTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
