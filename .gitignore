@@ -12,6 +12,8 @@ TestResults
 *.suo
 *.user
 *.sln.docstates
+Tests/privateConnectionStrings.config
+Tests/privateAppSettings.config
 
 # Build results
 [Dd]ebug/
